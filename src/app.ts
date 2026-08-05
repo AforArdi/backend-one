@@ -2,10 +2,11 @@ import express, { type Application } from 'express';
 import router from './routes/routes.js';
 import notFound from './middleware/notFound.js';
 import globalError from './middleware/globalError.js';
+import { env } from './config/env.js';
 
 const app: Application = express();
 
-const port = process.env.PORT || 5000;
+const port = env.port;
 
 app.use(express.json());
 app.use('/api/v1', router);
