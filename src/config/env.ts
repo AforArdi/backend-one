@@ -8,4 +8,5 @@ const validatedEnv = validateEnv(process.env);
 export const env = {
     port: validatedEnv.PORT,
     nodeEnv: validatedEnv.NODE_ENV,
+    databaseUrl: validatedEnv.DATABASE_URL,
 };
