@@ -1,5 +1,5 @@
 # Simple Single Vendor ERD
-
+<img width="1028" height="650" alt="practice" src="https://github.com/user-attachments/assets/5799b4e6-a6b3-43a4-839f-2fcd4aaf1d99" />
 
 # 1. PostgreSQL Data Types (Important Ones)
 
