@@ -11,9 +11,9 @@ const register = catchAsync(async (req: Request, res: Response) => {
     ApiResponse.success(res, 'registration success', 200, result);
 });
 const login = catchAsync(async (req: Request, res: Response) => {
-    const { email, password } = req.body;
+    const payload = req.body;
 
-    const result = await authService.userLogin({ email, password });
+    const result = await authService.userLogin(payload);
 
     ApiResponse.success(res, 'login success', 200, result);
 });
