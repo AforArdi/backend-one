@@ -4,13 +4,9 @@ import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/ApiResponse.js";
 
 const register = catchAsync(async (req: Request, res: Response) => {
-    const { name, email, password } = req.body;
+    const payload = req.body;
 
-    if (!name || !email || !password) {
-        return ApiResponse.error(res, 400, 'All fields are required');
-    }
-
-    const result = await authService.userRegister({ name, email, password });
+    const result = await authService.userRegister(payload);
 
     ApiResponse.success(res, 'registration success', 200, result);
 });
