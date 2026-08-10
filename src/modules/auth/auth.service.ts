@@ -27,6 +27,8 @@ const userLogin = async (payload: any) => {
     }
 
     return user;
+    // const { password, ...userWithoutPassword } = user;
+    // return userWithoutPassword;
 };
 const userRegister = async (payload: UserRegisterInput) => {
     const userExists = await prisma.user.findFirst({
@@ -58,7 +60,44 @@ const userRegister = async (payload: UserRegisterInput) => {
 
 };
 
+const userDelete = async (id: string) => {
+    const user = await prisma.user.findUnique({
+        where: {
+            id
+        },
+    });
+    if (!user) {
+        throw new AppError("User not found", StatusCodes.NOT_FOUND);
+    }
+    await prisma.user.delete({
+        where: {
+            id
+        }
+    })
+    return user;
+}
+
+const userUpdate = async (id: string, payload: Partial<UserRegisterInput>) => {
+    const user = await prisma.user.findUnique({
+        where: {
+            id
+        }
+    });
+    if (!user) {
+        throw new AppError("User not found", StatusCodes.NOT_FOUND);
+    }
+    const updatedUser = await prisma.user.update({
+        where: {
+            id
+        },
+        data: payload
+    })
+    return updatedUser;
+}
+
 export const authService = {
     userRegister,
-    userLogin
+    userLogin,
+    userDelete,
+    userUpdate,
 };
