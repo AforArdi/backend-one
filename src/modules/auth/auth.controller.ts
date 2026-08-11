@@ -2,11 +2,20 @@ import type { Request, Response } from "express";
 import { authService } from "./auth.service.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/ApiResponse.js";
+import { sendEmail } from "../../services/mail.service.js";
+import testTemp from "../../utils/mail.template.js";
 
 const register = catchAsync(async (req: Request, res: Response) => {
     const payload = req.body;
 
     const result = await authService.userRegister(payload);
+
+    // Send welcome email asynchronously without blocking the response
+    sendEmail({
+        to: result.email,
+        subject: "Welcome to Rise Together!",
+        html: testTemp(result.name, result.email)
+    }).catch(err => console.error("Failed to send welcome email:", err));
 
     ApiResponse.success(res, 'registration success', 200, result);
 });
