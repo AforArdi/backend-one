@@ -1,3 +1,92 @@
+# Rise Together - Backend
+
+Backend API for Rise Together built with Express, TypeScript, Prisma ORM, and PostgreSQL (Neon DB).
+
+## 🚀 Live Deployment (Render)
+
+The backend is containerized and deployed on Render:
+- **Base URL:** `https://rise-together-backend-latest.onrender.com`
+- **Get All Users Endpoint:**
+  ```http
+  GET https://rise-together-backend-latest.onrender.com/api/v1/auth/get-users
+  ```
+  *(Instead of hitting `http://localhost:5000/api/v1/auth/get-users`, you can query the live Render deployment).*
+
+---
+
+## 🐳 Docker & Docker Compose Setup
+
+This project is fully containerized using Docker and Docker Compose, configured to connect to remote cloud **Neon DB** using environment variables.
+
+### 1. Dockerfile
+The [Dockerfile](Dockerfile) provides an optimized Node.js Alpine build:
+- **Package Manager:** Uses `pnpm` to install dependencies.
+- **Prisma Client:** Copies schema and runs `pnpm prisma generate` to create the Linux-compatible Prisma Client.
+- **TypeScript Build:** Compiles TypeScript source to `./dist` via `tsc`.
+- **Production Execution:** Starts the server with `pnpm run start` (`node dist/server.js`).
+
+### 2. Docker Compose
+The [docker-compose.yaml](docker-compose.yaml) manages the application lifecycle and loads database & SMTP credentials from `.env`:
+
+```yaml
+services:
+  app:
+    container_name: rise-together-backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-5000}:${PORT:-5000}"
+    env_file:
+      - .env
+    restart: unless-stopped
+```
+
+---
+
+## 🛠️ Docker Commands
+
+### Local Execution with Compose
+```bash
+# Build and run container in background
+docker compose up -d --build
+
+# Follow logs
+docker compose logs -f
+
+# Stop container
+docker compose down
+```
+
+### Push to Docker Hub (for Render Deployment)
+```bash
+# 1. Build and tag image
+docker build -t <your-dockerhub-username>/rise-together-backend:latest .
+
+# 2. Login to Docker Hub
+docker login
+
+# 3. Push image
+docker push <your-dockerhub-username>/rise-together-backend:latest
+```
+
+---
+
+## 🔐 Auth API Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/` | API Status / Welcome |
+| `POST` | `/api/v1/auth/register` | Register a new user |
+| `POST` | `/api/v1/auth/login` | User login |
+| `GET` | `/api/v1/auth/get-users` | Fetch all users |
+| `PATCH` | `/api/v1/auth/update` | Update user details |
+| `DELETE` | `/api/v1/auth/delete` | Delete user |
+
+---
+
+# Database Schema & Reference
+
 # Simple Single Vendor ERD
 <img width="1028" height="650" alt="practice" src="https://github.com/user-attachments/assets/5799b4e6-a6b3-43a4-839f-2fcd4aaf1d99" />
 <img width="1065" height="650" alt="practice (1)" src="https://github.com/user-attachments/assets/59f7e9bf-fda9-4fbc-85d4-3d147ebaf307" />
