@@ -95,9 +95,15 @@ const userUpdate = async (id: string, payload: Partial<UserRegisterInput>) => {
     return updatedUser;
 }
 
+const getUsers = async () => {
+    const users = await prisma.user.findMany();
+    return users;
+}
+
 export const authService = {
     userRegister,
     userLogin,
     userDelete,
     userUpdate,
+    getUsers,
 };

@@ -43,9 +43,16 @@ const updateUser = catchAsync(async (req: Request, res: Response) => {
     ApiResponse.success(res, 'user updated successfully', 200, result);
 })
 
+const getAllUsers = catchAsync(async (req: Request, res: Response) => {
+    const result = await authService.getUsers();
+
+    ApiResponse.success(res, 'users fetched successfully', 200, result);
+})
+
 export const authController = {
     login,
     register,
     deleteUser,
-    updateUser
+    updateUser,
+    getAllUsers
 };

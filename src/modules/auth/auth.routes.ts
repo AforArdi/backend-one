@@ -6,3 +6,4 @@ router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.delete('/delete', authController.deleteUser);
 router.patch('/update', authController.updateUser);
+router.get('/get-users', authController.getAllUsers);
