@@ -11,7 +11,8 @@ COPY package.json ./
 # Install dependencies
 RUN pnpm install --no-frozen-lockfile
 
-# Copy Prisma schema and generate client (required for auth/db)
+# Copy Prisma config, schema and generate client (required for auth/db)
+COPY prisma.config.ts ./
 COPY prisma ./prisma/
 RUN pnpm prisma generate
 
