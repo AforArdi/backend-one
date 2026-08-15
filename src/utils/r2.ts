@@ -25,7 +25,7 @@ const processImage = async (
         .webp({ quality: 80 })
         .toBuffer();
 
-    const fileName = `$ { crypto.randomUUID() }.webp`;
+    const fileName = `${crypto.randomUUID()}.webp`;
 
     const key = `${options.folder}/${fileName}`;
 

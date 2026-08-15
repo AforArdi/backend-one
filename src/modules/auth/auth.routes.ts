@@ -8,4 +8,4 @@ router.post('/login', authController.login);
 router.delete('/delete', authController.deleteUser);
 router.patch('/update', authController.updateUser);
 router.get('/get-users', authController.getAllUsers);
-router.delete('/delete-avatar', authController.deleteUserAvatar);
+router.delete('/delete-avatar/:id', authController.deleteUserAvatar);
