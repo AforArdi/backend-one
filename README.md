@@ -2,6 +2,11 @@
 
 Backend API for Rise Together built with Express, TypeScript, Prisma ORM, and PostgreSQL (Neon DB).
 
+## ✨ Recent Implementations
+
+- **Cloudflare R2 Object Storage:** Implemented secure image uploads and deletions using `Multer` for memory storage, `Sharp` for image resizing and WebP optimization, and the `@aws-sdk/client-s3` (S3-compatible API) for interacting with Cloudflare R2. A detailed implementation guide: (open directly in [Obsidian](obsidian://open?vault=RiseTogether%20Backend%20Classes&file=Cloudflare%20R2)).
+- **CI/CD Pipeline:** Configured continuous integration using GitHub Actions to automatically run TypeScript builds, Prisma schema generation, and Docker containerization to ensure production readiness before deployment.
+
 ## 🚀 Live Deployment (Render)
 
 The backend is containerized and deployed on Render:
