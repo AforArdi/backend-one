@@ -15,4 +15,10 @@ export const env = {
     smtpUser: validatedEnv.SMTP_USER,
     smtpPass: validatedEnv.SMTP_PASS,
     smtpFrom: validatedEnv.SMTP_FROM,
+    r2Endpoint: validatedEnv.R2_ENDPOINT,
+    r2AccessKeyId: validatedEnv.R2_ACCESS_KEY_ID,
+    r2SecretAccessKey: validatedEnv.R2_SECRET_ACCESS_KEY,
+    r2BucketName: validatedEnv.R2_BUCKET_NAME,
+    r2PublicUrl: validatedEnv.R2_PUBLIC_URL,
+    r2AccountId: validatedEnv.R2_ACCOUNT_ID,
 };

@@ -3,7 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import bcrypt from "bcrypt";
 import type { UserRegisterInput } from "./auth.validation.js";
-
+import { deleteImage, uploadImage } from "../../utils/r2.js";
 const userLogin = async (payload: any) => {
     const user = await prisma.user.findFirst({
         where: {
@@ -30,7 +30,7 @@ const userLogin = async (payload: any) => {
     // const { password, ...userWithoutPassword } = user;
     // return userWithoutPassword;
 };
-const userRegister = async (payload: UserRegisterInput) => {
+const userRegister = async (payload: UserRegisterInput, avatarFile?: Buffer) => {
     const userExists = await prisma.user.findFirst({
         where: {
             email: payload.email,
@@ -42,10 +42,21 @@ const userRegister = async (payload: UserRegisterInput) => {
     }
     const hashedPassword = await bcrypt.hash(payload.password, 10);
 
+    let avatarKey: string | null = null;
+    let avatarUrl: string | null = null;
+
+    if (avatarFile) {
+        const result = await uploadImage(avatarFile, { folder: "rise-together-backend-class" });
+        avatarKey = result.key;
+        avatarUrl = result.url;
+    }
+
     const user = await prisma.user.create({
         data: {
             ...payload,
-            password: hashedPassword
+            password: hashedPassword,
+            ...(avatarKey && { avatarKey }),
+            ...(avatarUrl && { avatarUrl }),
         },
         select: {
             id: true,
@@ -53,6 +64,7 @@ const userRegister = async (payload: UserRegisterInput) => {
             email: true,
             phone: true,
             bio: true,
+            avatarUrl: true,
         }
     })
 
@@ -100,10 +112,35 @@ const getUsers = async () => {
     return users;
 }
 
+const userDeleteAvatar = async (id: string) => {
+    const user = await prisma.user.findUnique({
+        where: {
+            id
+        }
+    });
+    if (!user) {
+        throw new AppError("User not found", StatusCodes.NOT_FOUND);
+    }
+    if (user.avatarKey) {
+        await deleteImage(user.avatarKey)
+    }
+    await prisma.user.update({
+        where: {
+            id
+        },
+        data: {
+            avatarUrl: null,
+            avatarKey: null,
+        }
+    })
+    return user;
+}
+
 export const authService = {
     userRegister,
     userLogin,
     userDelete,
     userUpdate,
     getUsers,
+    userDeleteAvatar,
 };

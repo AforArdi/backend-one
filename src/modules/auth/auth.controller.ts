@@ -7,8 +7,9 @@ import testTemp from "../../utils/mail.template.js";
 
 const register = catchAsync(async (req: Request, res: Response) => {
     const payload = req.body;
+    const file = req.file;
 
-    const result = await authService.userRegister(payload);
+    const result = await authService.userRegister(payload, file?.buffer);
 
     // Send welcome email asynchronously without blocking the response
     sendEmail({
@@ -49,10 +50,19 @@ const getAllUsers = catchAsync(async (req: Request, res: Response) => {
     ApiResponse.success(res, 'users fetched successfully', 200, result);
 })
 
+const deleteUserAvatar = catchAsync(async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+
+    const result = await authService.userDeleteAvatar(id);
+
+    ApiResponse.success(res, 'user avatar deleted successfully', 200, result);
+})
+
 export const authController = {
     login,
     register,
     deleteUser,
     updateUser,
-    getAllUsers
+    getAllUsers,
+    deleteUserAvatar
 };

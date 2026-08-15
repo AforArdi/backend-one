@@ -9,7 +9,13 @@ const envSchema = z.object({
     SMTP_SECURE: z.coerce.boolean(),
     SMTP_USER: z.email(),
     SMTP_PASS: z.string(),
-    SMTP_FROM: z.string(),
+    SMTP_FROM: z.email(),
+    R2_ENDPOINT: z.url(),
+    R2_ACCESS_KEY_ID: z.string(),
+    R2_SECRET_ACCESS_KEY: z.string(),
+    R2_BUCKET_NAME: z.string(),
+    R2_PUBLIC_URL: z.url(),
+    R2_ACCOUNT_ID: z.string(),
 });
 
 export const validateEnv = (env: NodeJS.ProcessEnv) => {
