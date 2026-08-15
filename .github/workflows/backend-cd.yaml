@@ -7,8 +7,14 @@ on:
     types:
       - completed
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+
     name: Deploy to Docker Hub
     runs-on: ubuntu-latest
 
@@ -21,3 +27,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Docker Build
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/rise-together-backend:latest .
+
+      - name: Docker Push
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/rise-together-backend:latest
+
+      - name: Deploy on Render
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_WEBHOOK_URL }}"
