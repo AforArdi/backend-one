@@ -10,7 +10,7 @@ export const generateOtp = (): string => {
 
 export const storeOtpAndPayload = async (email: string, otp: string, payload?: any): Promise<void> => {
     const redis = await getRedisClient();
-    
+
     // Store OTP and user payload as a JSON string
     const dataToStore = {
         otp,
