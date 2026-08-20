@@ -4,6 +4,7 @@ import { AppError } from "../../utils/AppError.js";
 import bcrypt from "bcrypt";
 import type { UserRegisterInput } from "./auth.validation.js";
 import { deleteImage, uploadImage } from "../../utils/r2.js";
+
 const userLogin = async (payload: any) => {
     const user = await prisma.user.findFirst({
         where: {

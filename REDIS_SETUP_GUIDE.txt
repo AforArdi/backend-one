@@ -1,0 +1,1009 @@
+================================================================================
+                    REDIS SETUP GUIDE FOR RISE TOGETHER BACKEND
+                          (Complete for Beginners)
+================================================================================
+
+TABLE OF CONTENTS:
+1. What is Redis?
+2. Project Setup (Docker + Docker Compose)
+3. Install Redis Client Library
+4. Create Redis Configuration
+5. Test OTP Sending with Redis
+6. Test Message Sending with Redis
+7. Docker Build & Run with Redis
+8. CI/CD Integration with Redis
+9. Common Redis Commands
+10. Troubleshooting
+
+================================================================================
+1. WHAT IS REDIS?
+================================================================================
+
+Redis = Remote Dictionary Server
+
+Simple definition: A fast, in-memory database that stores key-value pairs.
+
+Why use Redis for this project?
+- Store temporary OTP codes (expire after 5-10 minutes)
+- Queue messages for sending
+- Cache user data
+- Session management
+- Real-time notifications
+
+Key features:
+✓ Super fast (in-memory)
+✓ Automatic expiration (set TTL on keys)
+✓ Data types: strings, lists, sets, hashes, sorted sets
+✓ Pub/Sub for real-time messaging
+
+================================================================================
+2. PROJECT SETUP (DOCKER + DOCKER COMPOSE)
+================================================================================
+
+Your project already has:
+✓ Dockerfile (Node.js Alpine)
+✓ docker-compose.yaml
+✓ CI/CD pipeline (GitHub Actions)
+✓ REDIS_URL in env.validation.ts
+
+Now add Redis service to docker-compose.yaml:
+
+FILE: docker-compose.yaml
+---
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: rise-together-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    container_name: rise-together-backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-5000}:${PORT:-5000}"
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+---
+
+Explanation of Redis config:
+- image: redis:7-alpine → Latest Redis on Alpine (lightweight)
+- ports: "6379:6379" → Default Redis port
+- volumes: Persists data to disk
+- command: --appendonly yes → Append-only file (saves data on disk)
+- healthcheck: Ensures Redis is ready before app starts
+- depends_on: Makes app wait for Redis
+
+Update your .env file:
+---
+REDIS_URL=redis://redis:6379/0
+---
+
+NOTE: When running locally with Docker Compose:
+- Redis hostname is "redis" (service name)
+- Port is 6379 (default)
+- Full URL: redis://redis:6379/0
+
+When running OUTSIDE Docker (localhost development):
+- REDIS_URL=redis://localhost:6379/0
+
+================================================================================
+3. INSTALL REDIS CLIENT LIBRARY
+================================================================================
+
+Your project uses Node.js + TypeScript. Install a Redis client:
+
+Option A: redis (Official, Recommended)
+---
+pnpm add redis
+pnpm add -D @types/redis
+---
+
+Option B: ioredis (Alternative, also good)
+---
+pnpm add ioredis
+pnpm add -D @types/ioredis
+---
+
+This guide uses "redis" (Option A).
+
+After installation:
+- package.json will be updated
+- pnpm-lock.yaml will be updated
+- Rebuild Docker image to include new dependency
+
+================================================================================
+4. CREATE REDIS CONFIGURATION
+================================================================================
+
+Create a new file: src/config/redis.ts
+
+---FILE: src/config/redis.ts---
+
+import { createClient } from 'redis';
+import { env } from './env.js';
+
+let redisClient: ReturnType<typeof createClient> | null = null;
+
+export const getRedisClient = async () => {
+  if (redisClient) {
+    return redisClient;
+  }
+
+  redisClient = createClient({
+    url: env.redisUrl,
+  });
+
+  redisClient.on('error', (err) => console.error('Redis Client Error:', err));
+  redisClient.on('connect', () => console.log('Redis Connected'));
+
+  await redisClient.connect();
+
+  return redisClient;
+};
+
+export const disconnectRedis = async () => {
+  if (redisClient) {
+    await redisClient.quit();
+    redisClient = null;
+  }
+};
+
+---END FILE---
+
+This creates a singleton Redis connection that reuses across your app.
+
+Update src/config/env.ts to export redisUrl:
+
+Already done! Your env.ts has:
+export const env = {
+    ...
+    redisUrl: validatedEnv.REDIS_URL,
+};
+
+================================================================================
+5. TEST OTP SENDING WITH REDIS
+================================================================================
+
+Create: src/services/otp.service.ts
+
+---FILE: src/services/otp.service.ts---
+
+import { getRedisClient } from '../config/redis.js';
+
+const OTP_EXPIRY_SECONDS = 600; // 10 minutes
+
+// Generate random 6-digit OTP
+export const generateOTP = (): string => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// Store OTP in Redis with expiry
+export const storeOTP = async (email: string, otp: string): Promise<void> => {
+  const redis = await getRedisClient();
+  const key = `otp:${email}`;
+  
+  // SET key value EX seconds
+  await redis.setEx(key, OTP_EXPIRY_SECONDS, otp);
+  
+  console.log(`OTP stored for ${email}: ${otp} (expires in ${OTP_EXPIRY_SECONDS}s)`);
+};
+
+// Verify OTP from Redis
+export const verifyOTP = async (email: string, otp: string): Promise<boolean> => {
+  const redis = await getRedisClient();
+  const key = `otp:${email}`;
+  
+  const storedOTP = await redis.get(key);
+  
+  if (!storedOTP) {
+    console.log(`OTP expired or not found for ${email}`);
+    return false;
+  }
+  
+  const isValid = storedOTP === otp;
+  
+  if (isValid) {
+    // Delete OTP after verification (one-time use)
+    await redis.del(key);
+    console.log(`OTP verified and deleted for ${email}`);
+  }
+  
+  return isValid;
+};
+
+// Get remaining TTL (time-to-live)
+export const getOTPTTL = async (email: string): Promise<number> => {
+  const redis = await getRedisClient();
+  const key = `otp:${email}`;
+  
+  const ttl = await redis.ttl(key);
+  return ttl; // -1 if no expiry, -2 if key doesn't exist
+};
+
+---END FILE---
+
+Now create an OTP route to test: src/routes/otp.route.ts
+
+---FILE: src/routes/otp.route.ts---
+
+import { Router, Request, Response } from 'express';
+import { generateOTP, storeOTP, verifyOTP, getOTPTTL } from '../services/otp.service.js';
+import { sendEmail } from '../services/mail.service.js';
+
+const otpRouter = Router();
+
+// Endpoint 1: Request OTP (send to email)
+otpRouter.post('/request-otp', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email required' });
+    }
+
+    // Generate OTP
+    const otp = generateOTP();
+
+    // Store in Redis
+    await storeOTP(email, otp);
+
+    // Send via email
+    await sendEmail({
+      to: email,
+      subject: 'Your OTP Code',
+      html: `
+        <h2>OTP Verification</h2>
+        <p>Your OTP code is: <strong>${otp}</strong></p>
+        <p>This code expires in 10 minutes.</p>
+      `,
+    });
+
+    res.status(200).json({
+      message: 'OTP sent to email',
+      email,
+      // Remove in production! Only for testing:
+      otp_for_testing: otp,
+    });
+  } catch (error) {
+    console.error('Error requesting OTP:', error);
+    res.status(500).json({ message: 'Failed to send OTP' });
+  }
+});
+
+// Endpoint 2: Verify OTP
+otpRouter.post('/verify-otp', async (req: Request, res: Response) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email and OTP required' });
+    }
+
+    const isValid = await verifyOTP(email, otp);
+
+    if (isValid) {
+      return res.status(200).json({
+        message: 'OTP verified successfully',
+        verified: true,
+      });
+    } else {
+      return res.status(401).json({
+        message: 'Invalid or expired OTP',
+        verified: false,
+      });
+    }
+  } catch (error) {
+    console.error('Error verifying OTP:', error);
+    res.status(500).json({ message: 'Failed to verify OTP' });
+  }
+});
+
+// Endpoint 3: Check OTP TTL (for debugging)
+otpRouter.get('/otp-ttl/:email', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.params;
+
+    const ttl = await getOTPTTL(email);
+
+    res.status(200).json({
+      email,
+      ttl_seconds: ttl,
+      message: ttl > 0 ? `OTP expires in ${ttl} seconds` : 'No OTP found',
+    });
+  } catch (error) {
+    console.error('Error checking TTL:', error);
+    res.status(500).json({ message: 'Failed to check TTL' });
+  }
+});
+
+export default otpRouter;
+
+---END FILE---
+
+Add to your main router: src/routes/routes.ts (or routes.js)
+
+Add this line:
+---
+import otpRouter from './otp.route.js';
+
+// ... other imports ...
+
+router.use('/api/v1/otp', otpRouter);
+---
+
+================================================================================
+6. TEST MESSAGE SENDING WITH REDIS
+================================================================================
+
+Create: src/services/message-queue.service.ts
+
+---FILE: src/services/message-queue.service.ts---
+
+import { getRedisClient } from '../config/redis.js';
+
+interface MessageJob {
+  to: string;
+  subject: string;
+  html: string;
+  timestamp: number;
+  attempt: number;
+}
+
+const MESSAGE_QUEUE_KEY = 'message:queue';
+const PROCESSING_KEY = 'message:processing';
+
+// Add message to queue
+export const queueMessage = async (
+  to: string,
+  subject: string,
+  html: string
+): Promise<void> => {
+  const redis = await getRedisClient();
+
+  const job: MessageJob = {
+    to,
+    subject,
+    html,
+    timestamp: Date.now(),
+    attempt: 0,
+  };
+
+  // Push to queue (FIFO - First In First Out)
+  await redis.lPush(MESSAGE_QUEUE_KEY, JSON.stringify(job));
+
+  console.log(`Message queued for ${to}`);
+};
+
+// Get next message from queue (non-blocking)
+export const getNextQueuedMessage = async (): Promise<MessageJob | null> => {
+  const redis = await getRedisClient();
+
+  // POP from right (gets oldest message first)
+  const jobData = await redis.rPop(MESSAGE_QUEUE_KEY);
+
+  if (!jobData) {
+    return null;
+  }
+
+  return JSON.parse(jobData);
+};
+
+// Get queue length
+export const getQueueLength = async (): Promise<number> => {
+  const redis = await getRedisClient();
+  const length = await redis.lLen(MESSAGE_QUEUE_KEY);
+  return length;
+};
+
+// Get all queued messages (for debugging)
+export const getAllQueuedMessages = async (): Promise<MessageJob[]> => {
+  const redis = await getRedisClient();
+
+  // LRANGE key 0 -1 (gets all items)
+  const items = await redis.lRange(MESSAGE_QUEUE_KEY, 0, -1);
+
+  return items.map(item => JSON.parse(item));
+};
+
+// Mark message as processing
+export const markMessageProcessing = async (jobId: string): Promise<void> => {
+  const redis = await getRedisClient();
+  
+  // Store for 1 hour (3600 seconds) for tracking
+  await redis.setEx(PROCESSING_KEY + ':' + jobId, 3600, 'processing');
+};
+
+// Clear message from processing
+export const clearMessageProcessing = async (jobId: string): Promise<void> => {
+  const redis = await getRedisClient();
+  await redis.del(PROCESSING_KEY + ':' + jobId);
+};
+
+---END FILE---
+
+Create: src/routes/message.route.ts
+
+---FILE: src/routes/message.route.ts---
+
+import { Router, Request, Response } from 'express';
+import {
+  queueMessage,
+  getQueueLength,
+  getAllQueuedMessages,
+  getNextQueuedMessage,
+} from '../services/message-queue.service.js';
+import { sendEmail } from '../services/mail.service.js';
+
+const messageRouter = Router();
+
+// Endpoint 1: Queue a message (add to Redis queue)
+messageRouter.post('/queue', async (req: Request, res: Response) => {
+  try {
+    const { to, subject, html } = req.body;
+
+    if (!to || !subject || !html) {
+      return res.status(400).json({
+        message: 'to, subject, and html are required',
+      });
+    }
+
+    await queueMessage(to, subject, html);
+
+    res.status(200).json({
+      message: 'Message queued successfully',
+      to,
+      subject,
+    });
+  } catch (error) {
+    console.error('Error queuing message:', error);
+    res.status(500).json({ message: 'Failed to queue message' });
+  }
+});
+
+// Endpoint 2: Get queue length (how many messages waiting)
+messageRouter.get('/queue-length', async (req: Request, res: Response) => {
+  try {
+    const length = await getQueueLength();
+
+    res.status(200).json({
+      queue_length: length,
+      message: `${length} message(s) in queue`,
+    });
+  } catch (error) {
+    console.error('Error getting queue length:', error);
+    res.status(500).json({ message: 'Failed to get queue length' });
+  }
+});
+
+// Endpoint 3: Get all queued messages (debugging)
+messageRouter.get('/queue-all', async (req: Request, res: Response) => {
+  try {
+    const messages = await getAllQueuedMessages();
+
+    res.status(200).json({
+      count: messages.length,
+      messages,
+    });
+  } catch (error) {
+    console.error('Error getting queued messages:', error);
+    res.status(500).json({ message: 'Failed to get queued messages' });
+  }
+});
+
+// Endpoint 4: Process one message from queue
+messageRouter.post('/process-one', async (req: Request, res: Response) => {
+  try {
+    const job = await getNextQueuedMessage();
+
+    if (!job) {
+      return res.status(400).json({
+        message: 'No messages in queue',
+      });
+    }
+
+    // Send email
+    await sendEmail({
+      to: job.to,
+      subject: job.subject,
+      html: job.html,
+    });
+
+    res.status(200).json({
+      message: 'Message sent successfully',
+      to: job.to,
+      subject: job.subject,
+      sent_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error processing message:', error);
+    res.status(500).json({ message: 'Failed to process message' });
+  }
+});
+
+// Endpoint 5: Process all queued messages
+messageRouter.post('/process-all', async (req: Request, res: Response) => {
+  try {
+    let processed = 0;
+    let failed = 0;
+
+    while (true) {
+      const job = await getNextQueuedMessage();
+
+      if (!job) break;
+
+      try {
+        await sendEmail({
+          to: job.to,
+          subject: job.subject,
+          html: job.html,
+        });
+        processed++;
+      } catch (error) {
+        console.error(`Failed to send to ${job.to}:`, error);
+        failed++;
+      }
+    }
+
+    res.status(200).json({
+      message: 'Batch processing complete',
+      processed,
+      failed,
+    });
+  } catch (error) {
+    console.error('Error processing all messages:', error);
+    res.status(500).json({ message: 'Failed to process all messages' });
+  }
+});
+
+export default messageRouter;
+
+---END FILE---
+
+Add to your main router: src/routes/routes.ts
+
+Add this line:
+---
+import messageRouter from './message.route.js';
+
+// ... other imports ...
+
+router.use('/api/v1/messages', messageRouter);
+---
+
+================================================================================
+7. DOCKER BUILD & RUN WITH REDIS
+================================================================================
+
+Step 1: Update Dockerfile to include redis dependency
+---
+The Dockerfile already handles pnpm install, so when you add "redis" to 
+package.json, it will be installed automatically during build.
+---
+
+Step 2: Build and run locally with Docker Compose
+
+Commands:
+---
+# Build images
+docker compose build
+
+# Start Redis + App in background
+docker compose up -d
+
+# Follow logs (all services)
+docker compose logs -f
+
+# Follow only app logs
+docker compose logs -f rise-together-backend
+
+# Follow only Redis logs
+docker compose logs -f rise-together-redis
+
+# Stop all services
+docker compose down
+
+# Stop and remove volumes (clears Redis data)
+docker compose down -v
+
+# Check service status
+docker compose ps
+---
+
+Step 3: Test Redis connection from inside container
+
+If app fails to connect to Redis:
+---
+docker exec rise-together-redis redis-cli ping
+# Should return: PONG
+
+# Or check with app logs
+docker compose logs rise-together-backend
+# Look for: "Redis Connected" message
+---
+
+Step 4: Test your endpoints locally
+
+With docker compose running:
+
+---
+# Test OTP request
+curl -X POST http://localhost:5000/api/v1/otp/request-otp \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com"}'
+
+# Response will include otp_for_testing (remove in production)
+
+# Test OTP verify
+curl -X POST http://localhost:5000/api/v1/otp/verify-otp \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","otp":"123456"}'
+
+# Test message queue
+curl -X POST http://localhost:5000/api/v1/messages/queue \
+  -H "Content-Type: application/json" \
+  -d '{"to":"user@example.com","subject":"Test","html":"<h1>Hello</h1>"}'
+
+# Get queue length
+curl http://localhost:5000/api/v1/messages/queue-length
+
+# Process all messages
+curl -X POST http://localhost:5000/api/v1/messages/process-all
+---
+
+================================================================================
+8. CI/CD INTEGRATION WITH REDIS
+================================================================================
+
+Your CI/CD is already set up:
+1. backend-ci.yaml: Lints, builds, type-checks
+2. backend-cd.yaml: Pushes to Docker Hub, deploys to Render
+
+When deploying to Render (production):
+
+Step 1: Add Redis service to Render
+- Go to Render dashboard
+- Create new Redis service
+- Copy the Redis URL (looks like: redis://username:password@host:port)
+
+Step 2: Update production environment variables
+
+In Render dashboard:
+- Add REDIS_URL environment variable
+- Paste the Redis URL from Step 1
+
+Step 3: No Dockerfile changes needed!
+Your Dockerfile already installs Redis client from package.json.
+
+The CD pipeline:
+---
+1. Code pushed to main
+2. backend-ci.yaml runs (lint, build, prisma generate)
+3. If CI passes → backend-cd.yaml runs
+4. Docker image built with Redis client included
+5. Image pushed to Docker Hub
+6. Render auto-deploys new image
+7. App connects to Redis at REDIS_URL from env vars
+---
+
+Alternative: Docker Compose in production (not recommended for Render)
+---
+If you self-host on a Linux server with Docker:
+
+docker compose up -d
+
+This will start both Redis and App together.
+Make sure server has enough memory (Redis needs RAM).
+---
+
+================================================================================
+9. COMMON REDIS COMMANDS
+================================================================================
+
+Access Redis CLI from container:
+---
+docker exec -it rise-together-redis redis-cli
+---
+
+Basic commands:
+
+SET / GET (store & retrieve):
+---
+SET mykey "hello"
+GET mykey
+# Returns: "hello"
+---
+
+SETEX (set with expiry):
+---
+SETEX mykey 60 "hello"  # expires in 60 seconds
+TTL mykey  # check remaining time
+# Returns: 59, 58, 57, ... then -2 when expired
+---
+
+DEL (delete key):
+---
+DEL mykey
+---
+
+EXISTS (check if key exists):
+---
+EXISTS mykey
+# Returns: 1 (exists) or 0 (doesn't exist)
+---
+
+KEYS (find all keys):
+---
+KEYS *  # Lists all keys
+KEYS otp:*  # Lists all OTP keys
+KEYS message:*  # Lists all message keys
+---
+
+LPUSH / RPUSH (add to list):
+---
+LPUSH mylist "first"
+LPUSH mylist "second"
+# List now: [second, first]
+---
+
+LPOP / RPOP (remove from list):
+---
+LPOP mylist  # removes from left
+RPOP mylist  # removes from right
+---
+
+LLEN (list length):
+---
+LLEN mylist
+---
+
+LRANGE (get range from list):
+---
+LRANGE mylist 0 -1  # all items
+LRANGE mylist 0 2   # first 3 items
+---
+
+FLUSH (delete all):
+---
+FLUSHDB  # delete all keys in current database
+FLUSHALL  # delete all databases
+---
+
+DBSIZE (how many keys):
+---
+DBSIZE  # returns number of keys
+---
+
+INFO (Redis stats):
+---
+INFO  # detailed stats
+INFO server  # only server info
+---
+
+MONITOR (watch commands in real-time):
+---
+MONITOR  # shows all commands being executed
+---
+
+Exit Redis CLI:
+---
+EXIT
+or
+QUIT
+---
+
+================================================================================
+10. TROUBLESHOOTING
+================================================================================
+
+Issue 1: "Failed to connect to Redis"
+---
+Cause: Redis container not running
+
+Solution:
+docker compose up -d  # Make sure Redis is started
+docker compose ps     # Check status
+docker compose logs rise-together-redis  # Check Redis logs
+
+Check REDIS_URL is correct:
+- Local: redis://localhost:6379/0
+- Docker: redis://redis:6379/0 (service name, not localhost)
+---
+
+Issue 2: "Connection refused on port 6379"
+---
+Cause: Port conflict or Redis crashed
+
+Solution:
+docker compose down -v  # Remove everything
+docker compose up -d --build  # Rebuild fresh
+---
+
+Issue 3: "OTP stored but verification fails"
+---
+Cause: OTP may have expired or typo in verification
+
+Solution:
+Check TTL: curl http://localhost:5000/api/v1/otp-ttl/:email
+Check Redis directly: docker exec -it rise-together-redis redis-cli GET otp:email@test.com
+---
+
+Issue 4: "Message queue not sending"
+---
+Cause: Email service misconfigured or queue empty
+
+Solution:
+Check queue length: curl http://localhost:5000/api/v1/messages/queue-length
+Check queued messages: curl http://localhost:5000/api/v1/messages/queue-all
+Check app logs: docker compose logs rise-together-backend
+---
+
+Issue 5: "Redis data persists but I want fresh data"
+---
+Cause: Append-only file saves data to disk
+
+Solution:
+docker compose down -v  # -v removes volumes (deletes all Redis data)
+docker compose up -d  # Starts fresh with empty Redis
+---
+
+Issue 6: "Out of memory errors"
+---
+Cause: Redis ran out of RAM
+
+Solution:
+Check Redis memory usage:
+docker exec rise-together-redis redis-cli INFO memory
+
+Increase memory limit in docker-compose.yaml:
+deploy:
+  resources:
+    limits:
+      memory: 512M  # or more
+
+Clear old data:
+docker exec rise-together-redis redis-cli FLUSHDB
+---
+
+Issue 7: "Slow Redis performance"
+---
+Cause: Too much data or inefficient queries
+
+Solution:
+Monitor commands: docker exec -it rise-together-redis redis-cli MONITOR
+Check database size: docker exec -it rise-together-redis redis-cli DBSIZE
+Profile slowlog: docker exec -it rise-together-redis redis-cli SLOWLOG GET 10
+---
+
+Issue 8: ".env file not loading REDIS_URL"
+---
+Cause: Typo in .env or env.validation not parsing
+
+Solution:
+Check .env file exists in project root
+Check REDIS_URL format: redis://host:6379/0
+Rebuild Docker image: docker compose build --no-cache
+Check validation: pnpm run type-check
+---
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Install Redis client library:
+   pnpm add redis
+
+2. Create src/config/redis.ts (connection config)
+
+3. Create src/services/otp.service.ts (OTP logic)
+
+4. Create src/services/message-queue.service.ts (message queue logic)
+
+5. Create src/routes/otp.route.ts (OTP endpoints)
+
+6. Create src/routes/message.route.ts (message endpoints)
+
+7. Update src/routes/routes.ts to include new routes
+
+8. Update docker-compose.yaml to add Redis service
+
+9. Add REDIS_URL to .env:
+   REDIS_URL=redis://redis:6379/0
+
+10. Build and test locally:
+    docker compose down -v
+    docker compose up -d --build
+
+11. Test endpoints with curl commands (see section 7)
+
+12. Verify in production:
+    - Add Redis instance to Render
+    - Set REDIS_URL environment variable
+    - CI/CD will auto-deploy
+
+================================================================================
+QUICK REFERENCE: KEY FILES TO CREATE
+================================================================================
+
+1. src/config/redis.ts
+   → Redis connection singleton
+
+2. src/services/otp.service.ts
+   → generateOTP()
+   → storeOTP()
+   → verifyOTP()
+   → getOTPTTL()
+
+3. src/services/message-queue.service.ts
+   → queueMessage()
+   → getNextQueuedMessage()
+   → getQueueLength()
+   → getAllQueuedMessages()
+
+4. src/routes/otp.route.ts
+   → POST /request-otp
+   → POST /verify-otp
+   → GET /otp-ttl/:email
+
+5. src/routes/message.route.ts
+   → POST /queue
+   → GET /queue-length
+   → GET /queue-all
+   → POST /process-one
+   → POST /process-all
+
+6. Update docker-compose.yaml
+   → Add Redis service
+   → Add depends_on for app
+
+7. Update .env
+   → REDIS_URL=redis://redis:6379/0
+
+================================================================================
+SUMMARY
+================================================================================
+
+Redis is a fast, temporary data store perfect for:
+✓ OTP codes (store for 10 minutes, auto-delete)
+✓ Message queues (store messages, process them later)
+✓ Sessions (store user session data)
+✓ Caching (store frequent queries)
+
+With Docker Compose:
+- Redis runs in a container
+- Auto-restarts with healthchecks
+- Data persists to disk
+- App waits for Redis before starting
+
+Your existing CI/CD pipeline:
+- Already pushes Docker images to Docker Hub
+- No changes needed
+- Render auto-deploys
+- Just add REDIS_URL to production environment
+
+Start small:
+1. Get OTP working first
+2. Then add message queue
+3. Then optimize based on needs
+
+Good luck! 🚀
+
+================================================================================

@@ -21,4 +21,5 @@ export const env = {
     r2BucketName: validatedEnv.R2_BUCKET_NAME,
     r2PublicUrl: validatedEnv.R2_PUBLIC_URL,
     r2AccountId: validatedEnv.R2_ACCOUNT_ID,
+    redisUrl: validatedEnv.REDIS_URL,
 };

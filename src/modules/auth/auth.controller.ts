@@ -3,23 +3,35 @@ import { authService } from "./auth.service.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/ApiResponse.js";
 import { sendEmail } from "../../services/mail.service.js";
-import testTemp from "../../utils/mail.template.js";
+import { generateOtp, storeOtpAndPayload } from "../otp/otp.service.js";
+import { prisma } from "../../lib/prisma.js";
+import { AppError } from "../../utils/AppError.js";
+import { StatusCodes } from "http-status-codes";
+import { otpTemplate } from "../../templates/otpTemplate.js";
 
 const register = catchAsync(async (req: Request, res: Response) => {
     const payload = req.body;
-    const file = req.file;
 
-    const result = await authService.userRegister(payload, file?.buffer);
+    // 1. Quick check if user already exists before sending OTP
+    const userExists = await prisma.user.findUnique({ where: { email: payload.email } });
+    if (userExists) {
+        throw new AppError("User already exists", StatusCodes.CONFLICT);
+    }
 
-    // Send welcome email asynchronously without blocking the response
+    // 2. Generate and store OTP along with the user's registration payload in Redis
+    const otp = generateOtp();
+    await storeOtpAndPayload(payload.email, otp, payload);
+
+    // 3. Send the OTP via email
     sendEmail({
-        to: result.email,
-        subject: "Welcome to Rise Together!",
-        html: testTemp(result.name, result.email)
-    }).catch(err => console.error("Failed to send welcome email:", err));
+        to: payload.email,
+        subject: "Verify your email for Rise Together",
+        html: otpTemplate(otp, 10)
+    }).catch(err => console.error("Failed to send OTP email:", err));
 
-    ApiResponse.success(res, 'registration success', 200, result);
+    ApiResponse.success(res, 'OTP sent to email. Please verify to complete registration.', 200, null);
 });
+
 const login = catchAsync(async (req: Request, res: Response) => {
     const payload = req.body;
 

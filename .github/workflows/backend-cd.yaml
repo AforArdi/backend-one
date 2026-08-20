@@ -34,5 +34,5 @@ jobs:
       - name: Docker Push
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/rise-together-backend:latest
 
-      - name: Deploy on Render
-        run: curl -X POST "${{ secrets.RENDER_DEPLOY_WEBHOOK_URL }}"
+      # - name: Deploy on Render
+      #   run: curl -X POST "${{ secrets.RENDER_DEPLOY_WEBHOOK_URL }}"
