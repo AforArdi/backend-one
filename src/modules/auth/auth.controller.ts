@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { authService } from "./auth.service.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/ApiResponse.js";
-import { sendEmail } from "../../services/mail.service.js";
+import { addMailJob } from "../../queues/mail.queue.js";
 import { generateOtp, storeOtpAndPayload } from "../otp/otp.service.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
@@ -22,14 +22,11 @@ const register = catchAsync(async (req: Request, res: Response) => {
     const otp = generateOtp();
     await storeOtpAndPayload(payload.email, otp, payload);
 
-    // 3. Send the OTP via email
-    await sendEmail({
+    // 3. Queue the OTP email
+    await addMailJob({
         to: payload.email,
         subject: "Verify your email for Rise Together",
         html: otpTemplate(otp, 10)
-    }).catch(err => {
-        console.error("Failed to send OTP email:", err);
-        throw new AppError("Failed to send email: " + err.message, StatusCodes.INTERNAL_SERVER_ERROR);
     });
 
     ApiResponse.success(res, 'OTP sent to email. Please verify to complete registration.', 200, null);

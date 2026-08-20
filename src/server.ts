@@ -3,12 +3,16 @@ import app from "./app.js";
 import { setupGracefulShutdown } from "./utils/shutdown.js";
 import { setupProcessHandlers } from "./utils/processHandler.js";
 import { transporter } from "./config/mail.js";
+import { startEmailWorker } from "./workers/mail.worker.js";
 
 const port = env.port;
 
 const server = app.listen(port, async () => {
     console.log(`server running on port ${port}`);
-    
+
+
+    startEmailWorker();
+
     try {
         await transporter.verify();
         console.log("Server is ready to take our messages");
