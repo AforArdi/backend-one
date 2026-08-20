@@ -4,6 +4,7 @@ import { AppError } from "../../utils/AppError.js";
 import bcrypt from "bcrypt";
 import type { UserRegisterInput } from "./auth.validation.js";
 import { deleteImage, uploadImage } from "../../utils/r2.js";
+import { cacheService } from "../../services/cache.service.js";
 
 const userLogin = async (payload: any) => {
     const user = await prisma.user.findFirst({
@@ -109,7 +110,19 @@ const userUpdate = async (id: string, payload: Partial<UserRegisterInput>) => {
 }
 
 const getUsers = async () => {
+    const cacheKey = "all_users";
+    const cachedUsers = await cacheService.getCache(cacheKey);
+
+    if (cachedUsers) {
+        console.log("Fetched users from Redis Cache");
+        return cachedUsers;
+    }
+
+    console.log("Fetched users from Database");
     const users = await prisma.user.findMany();
+
+    await cacheService.setCache(cacheKey, JSON.stringify(users), 60);
+
     return users;
 }
 
