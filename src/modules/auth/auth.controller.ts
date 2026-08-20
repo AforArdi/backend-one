@@ -23,11 +23,15 @@ const register = catchAsync(async (req: Request, res: Response) => {
     await storeOtpAndPayload(payload.email, otp, payload);
 
     // 3. Send the OTP via email
-    sendEmail({
+    await sendEmail({
         to: payload.email,
         subject: "Verify your email for Rise Together",
         html: otpTemplate(otp, 10)
-    }).catch(err => console.error("Failed to send OTP email:", err));
+    }).catch(err => {
+        // We log the error but don't necessarily want to fail the whole registration if email fails
+        // Alternatively, you can throw the error here if you want it to fail explicitly
+        console.error("Failed to send OTP email:", err)
+    });
 
     ApiResponse.success(res, 'OTP sent to email. Please verify to complete registration.', 200, null);
 });

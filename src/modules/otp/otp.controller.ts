@@ -13,7 +13,7 @@ export const sendOtp = catchAsync(async (req: Request, res: Response) => {
     const otp = generateOtp();
     await storeOtpAndPayload(email, otp);
 
-    sendEmail({
+    await sendEmail({
         to: email,
         subject: "Your OTP Code",
         html: otpTemplate(otp),
@@ -35,7 +35,7 @@ export const verifyOtp = catchAsync(async (req: Request, res: Response) => {
 
     const user = await authService.userRegister(payload);
 
-    sendEmail({
+    await sendEmail({
         to: user.email,
         subject: "Welcome to Rise Together!",
         html: otpTemplate(otp)
