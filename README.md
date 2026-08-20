@@ -4,8 +4,54 @@ Backend API for Rise Together built with Express, TypeScript, Prisma ORM, and Po
 
 ## ✨ Recent Implementations
 
+- **Redis Caching & Background Jobs:** Integrated Redis for blazing-fast in-memory caching of the `get-users` API, and integrated `BullMQ` for highly reliable, asynchronous background email delivery.
+- **OTP Registration Flow:** Replaced direct registration with an OTP-based verification flow. Users receive an OTP via email (processed in the background by a BullMQ worker) and are registered in the database only upon successful verification.
 - **Cloudflare R2 Object Storage:** Implemented secure image uploads and deletions using `Multer` for memory storage, `Sharp` for image resizing and WebP optimization, and the `@aws-sdk/client-s3` (S3-compatible API) for interacting with Cloudflare R2. A detailed implementation guide: [Cloudflare R2](obsidian://open?vault=RiseTogether%20Backend%20Classes&file=Cloudflare%20R2).
 - **CI/CD Pipeline:** Configured continuous integration using GitHub Actions to automatically run TypeScript builds, Prisma schema generation, and Docker containerization to ensure production readiness before deployment.
+
+---
+
+## 🧪 Testing the API Locally
+
+To test the newly implemented Redis and OTP flows locally, follow these steps:
+
+### 1. Start the Local Infrastructure
+First, ensure you have Redis running in the background via Docker:
+```bash
+docker compose up -d redis
+```
+Then, start the Node.js development server:
+```bash
+pnpm dev
+```
+
+### 2. Test Registration (Sending OTP)
+**POST** `http://localhost:5000/api/v1/auth/register`
+**Body (JSON):**
+```json
+{
+  "name": "Your Name",
+  "email": "your_email@gmail.com",
+  "password": "securepassword123"
+}
+```
+*Note: This triggers a background BullMQ job to send the email. Check your inbox for the OTP!*
+
+### 3. Verify OTP (Completing Registration)
+**POST** `http://localhost:5000/api/v1/otp/verify`
+**Body (JSON):**
+```json
+{
+  "email": "your_email@gmail.com",
+  "otp": 123456
+}
+```
+*Note: Provide the exact OTP you received in your email. Once verified, the user is successfully created in the PostgreSQL database and the OTP is destroyed from Redis.*
+
+### 4. Test Redis Caching
+**GET** `http://localhost:5000/api/v1/auth/get-users`
+- **First Request:** Fetches all users from the PostgreSQL database and stores the result in Redis for 60 seconds. (You will see `🗄️ Fetched users from Database` in your terminal).
+- **Subsequent Requests (within 60s):** Bypasses the database entirely and serves blazing-fast responses directly from the Redis Cache! (You will see `✅ Fetched users from Redis Cache` in your terminal).
 
 ## 🚀 Live Deployment (Render)
 
