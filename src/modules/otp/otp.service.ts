@@ -35,7 +35,7 @@ export const verifyOtpAndGetPayload = async (email: string, otp: string): Promis
 
     const storedData = JSON.parse(storedDataStr);
 
-    if (storedData.otp !== otp) {
+    if (String(storedData.otp) !== String(otp)) {
         throw new AppError("Invalid OTP", StatusCodes.UNAUTHORIZED);
     }
 

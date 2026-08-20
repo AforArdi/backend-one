@@ -16,7 +16,7 @@ const envSchema = z.object({
     R2_BUCKET_NAME: z.string(),
     R2_PUBLIC_URL: z.url(),
     R2_ACCOUNT_ID: z.string(),
-    REDIS_URL: z.string(),
+    REDIS_URL: z.url(),
 });
 
 export const validateEnv = (env: NodeJS.ProcessEnv) => {
