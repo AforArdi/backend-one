@@ -1,5 +1,4 @@
 node_modules
-.env
 PrismaSetup.md
 /src/generated/prisma
 .claude
@@ -9,3 +8,4 @@ skills-lock.json
 docker-cmd.txt
 OTP_REDIS_GUIDE.md
 REDIS_SETUP_GUIDE.txt
+config.bat

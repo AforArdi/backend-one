@@ -1,4 +1,4 @@
-# Rise Together - Backend
+# Rise Together - Backend Class Progress
 
 Backend API for Rise Together built with Express, TypeScript, Prisma ORM, and PostgreSQL (Neon DB).
 
